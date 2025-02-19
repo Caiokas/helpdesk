@@ -5,7 +5,7 @@ export default function Navigation() {
   return (
     <nav className="w-64 bg-white shadow-md">
       <div className="p-4">
-        <h1 className="text-2xl font-bold">Support Inbox</h1>
+        <h1 className="text-2xl font-bold">Meerkat Helpdesk</h1>
       </div>
       <ul className="space-y-2 p-4">
         <li>
