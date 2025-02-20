@@ -5,17 +5,18 @@ export async function POST(req) {
 
         global.ticketList = global.ticketList || [];
 
-        // ✅ Ensure all messages in conversation have a valid timestamp
-        const fixedConversation = conversation.map(msg => ({
-            ...msg,
-            timestamp: msg.timestamp || new Date().toISOString()
+        // ✅ Ensure conversation is only for this ticket and formatted correctly
+        const ticketConversation = (conversation || []).map(msg => ({
+            sender: msg.sender || "Unknown", // Prevent missing sender data
+            message: msg.message || "", // Ensure message is not null
+            timestamp: msg.timestamp || new Date().toISOString() // Add timestamp if missing
         }));
 
         const newTicket = {
             id: Date.now(),
             from,
             subject,
-            conversation: fixedConversation, // ✅ Store full conversation with timestamps
+            conversation: ticketConversation, // ✅ Stores only this ticket's messages
             timestamp: new Date().toISOString(),
             status: "unread",
             isStarred: false,
@@ -49,7 +50,7 @@ export async function POST(req) {
 // ✅ Handle GET requests to fetch tickets
 export async function GET() {
     console.log("📩 API GET Request: Fetching tickets list...");
-    
+
     return new Response(JSON.stringify({ success: true, tickets: global.ticketList || [] }), {
         headers: {
             "Content-Type": "application/json",
