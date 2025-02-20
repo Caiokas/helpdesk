@@ -11,7 +11,6 @@ const fetchTicketsFromAPI = async (setMessages) => {
   try {
     const response = await fetch("/api/create-ticket");
 
-    // ✅ Ensure response is JSON
     const contentType = response.headers.get("content-type");
     if (!contentType || !contentType.includes("application/json")) {
       throw new Error("❌ Invalid response format: Expected JSON but got something else");
@@ -21,7 +20,6 @@ const fetchTicketsFromAPI = async (setMessages) => {
 
     if (data.success && Array.isArray(data.tickets)) {
       setMessages((prevMessages) => {
-        // ✅ Ensure new tickets are added without duplicates
         const newTickets = data.tickets.filter(
           (ticket) => !prevMessages.some((msg) => msg.id === ticket.id)
         );
@@ -35,7 +33,6 @@ const fetchTicketsFromAPI = async (setMessages) => {
   }
 }
 
-
 export default function InboxPage() {
   const [messages, setMessages] = useState([])
   const [selectedMessage, setSelectedMessage] = useState(null)
@@ -44,12 +41,11 @@ export default function InboxPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const messagesPerPage = 20
 
-  // ✅ Fetch new tickets from API every 5 seconds
   useEffect(() => {
     fetchTicketsFromAPI(setMessages)
     const interval = setInterval(() => fetchTicketsFromAPI(setMessages), 5000)
 
-    return () => clearInterval(interval) // Cleanup on component unmount
+    return () => clearInterval(interval)
   }, [])
 
   const openTicket = (message) => {
@@ -111,7 +107,7 @@ export default function InboxPage() {
             className={`flex items-center p-3 rounded cursor-pointer ${
               message.status === "unread" ? "bg-blue-50" : "bg-white"
             } hover:bg-gray-100`}
-            onClick={() => openTicket(message)} // ✅ Open ticket when clicked
+            onClick={() => openTicket(message)}
           >
             <Button
               variant="ghost"
@@ -129,7 +125,9 @@ export default function InboxPage() {
                 <span className={`font-semibold ${message.status === "unread" ? "text-black" : "text-gray-600"}`}>
                   {message.from}
                 </span>
-                <span className="text-sm text-gray-500">{format(new Date(message.timestamp), "MMM d, h:mm a")}</span>
+                <span className="text-sm text-gray-500">
+                  {message.timestamp ? format(new Date(message.timestamp), "MMM d, yyyy h:mm a") : "Unknown Time"}
+                </span>
               </div>
               <div className="text-sm text-gray-600 truncate">{message.subject}</div>
             </div>
@@ -151,7 +149,6 @@ export default function InboxPage() {
         </Button>
       </div>
 
-      {/* ✅ Ticket Reply Section */}
       {selectedMessage && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -170,7 +167,11 @@ export default function InboxPage() {
             </div>
             <div className="mb-4">
               <p><strong>From:</strong> {selectedMessage.from}</p>
-              <p><strong>Date:</strong> {format(new Date(selectedMessage.timestamp), "MMM d, yyyy h:mm a")}</p>
+              <p><strong>Date:</strong> 
+                {selectedMessage.timestamp 
+                    ? format(new Date(selectedMessage.timestamp), "MMM d, yyyy h:mm a") 
+                    : "Unknown Time"}
+              </p>
             </div>
             <div className="border-t pt-4">
               <p>{selectedMessage.message}</p>
@@ -181,14 +182,16 @@ export default function InboxPage() {
                 {selectedMessage.conversation.map((reply, index) => (
                   <div key={index} className="mb-2">
                     <p><strong>{reply.from}:</strong> {reply.message}</p>
-                    <p className="text-sm text-gray-500">{format(new Date(reply.timestamp), "MMM d, yyyy h:mm a")}</p>
+                    <p className="text-sm text-gray-500">
+                      {reply.timestamp ? format(new Date(reply.timestamp), "MMM d, yyyy h:mm a") : "Unknown Time"}
+                    </p>
                   </div>
                 ))}
               </div>
             )}
             <div className="mt-6">
               {!isReplying ? (
-                <Button className="mr-2" onClick={() => setIsReplying(true)}>
+                <Button className="mr-2" onClick={handleReply}>
                   <Mail className="mr-2 h-4 w-4" /> Reply
                 </Button>
               ) : (

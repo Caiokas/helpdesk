@@ -1,29 +1,34 @@
 export async function POST(req) {
     try {
-        const { from, subject, message } = await req.json();
-        console.log("📩 API received ticket:", { from, subject, message });
+        const { from, subject, conversation } = await req.json();
+        console.log("📩 API received ticket with conversation:", { from, subject, conversation });
 
         global.ticketList = global.ticketList || [];
+
+        // ✅ Ensure all messages in conversation have a valid timestamp
+        const fixedConversation = conversation.map(msg => ({
+            ...msg,
+            timestamp: msg.timestamp || new Date().toISOString()
+        }));
 
         const newTicket = {
             id: Date.now(),
             from,
             subject,
-            message,
+            conversation: fixedConversation, // ✅ Store full conversation with timestamps
             timestamp: new Date().toISOString(),
             status: "unread",
             isStarred: false,
-            conversation: [],
         };
 
         global.ticketList.push(newTicket);
 
-        console.log("✅ Ticket saved:", newTicket);
+        console.log("✅ Ticket saved successfully:", newTicket);
 
         return new Response(JSON.stringify({ success: true, ticket: newTicket }), {
             headers: {
                 "Content-Type": "application/json",
-                "Access-Control-Allow-Origin": "*", // ✅ Allow external requests
+                "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "POST, OPTIONS",
                 "Access-Control-Allow-Headers": "Content-Type"
             },
@@ -43,7 +48,8 @@ export async function POST(req) {
 
 // ✅ Handle GET requests to fetch tickets
 export async function GET() {
-    console.log("📩 API GET Request: Sending tickets list");
+    console.log("📩 API GET Request: Fetching tickets list...");
+    
     return new Response(JSON.stringify({ success: true, tickets: global.ticketList || [] }), {
         headers: {
             "Content-Type": "application/json",
