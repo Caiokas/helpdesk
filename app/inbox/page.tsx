@@ -12,6 +12,10 @@ const fetchTicketsFromAPI = async (setMessages) => {
   try {
     const response = await fetch("/api/create-ticket");
 
+    if (!response.ok) {
+      throw new Error(`❌ API request failed with status: ${response.status}`);
+    }
+
     const contentType = response.headers.get("content-type");
     if (!contentType || !contentType.includes("application/json")) {
       throw new Error("❌ Invalid response format: Expected JSON but got something else");
@@ -70,20 +74,27 @@ export default function InboxPage() {
       timestamp: new Date().toISOString(),
     };
 
-    // ✅ Update Supabase with the new reply
+    // ✅ Append the new reply to the conversation
     const updatedConversation = [...selectedMessage.conversation, newReply];
+
     try {
-      const response = await fetch(`/api/create-ticket`, {
-        method: "POST",
+      // ✅ Make an API request to update ONLY the conversation in Supabase
+      const response = await fetch("/api/update-ticket", {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: selectedMessage.id,
-          conversation: updatedConversation,
+          id: selectedMessage.id, // ✅ Ticket ID
+          conversation: updatedConversation, // ✅ Updated conversation only
         }),
       });
 
+      if (!response.ok) {
+        throw new Error(`❌ API request failed with status: ${response.status}`);
+      }
+
       const result = await response.json();
       if (result.success) {
+        // ✅ Update local state to reflect changes immediately
         setMessages(messages.map((msg) =>
           msg.id === selectedMessage.id ? { ...msg, conversation: updatedConversation } : msg
         ));
@@ -181,7 +192,7 @@ export default function InboxPage() {
               </div>
             )}
 
-            {/* ✅ Fixed Reply Button */}
+            {/* ✅ Reply Section Fixed */}
             <div className="mt-6">
               {!isReplying ? (
                 <Button className="mr-2" onClick={handleReply}>
