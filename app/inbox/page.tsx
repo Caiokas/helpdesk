@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { Mail, Star, Send, ChevronLeft, ChevronRight } from "lucide-react";
+import { Trash2, Mail, Star, Send, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,10 +36,7 @@ const fetchTicketsFromAPI = async (setMessages) => {
 export default function InboxPage() {
   const [messages, setMessages] = useState([]);
   const [selectedMessage, setSelectedMessage] = useState(null);
-  const [isReplying, setIsReplying] = useState(false);
   const [replyText, setReplyText] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const messagesPerPage = 20;
 
   // ✅ Fetch tickets from API when page loads
   useEffect(() => {
@@ -52,35 +49,23 @@ export default function InboxPage() {
     setSelectedMessage(message);
   };
 
-  const toggleStarred = (id) => {
-    setMessages(messages.map((msg) => (msg.id === id ? { ...msg, isStarred: !msg.isStarred } : msg)));
-  };
-
-  // ✅ Function to update ticket status in Supabase
-  const handleStatusChange = async (newStatus) => {
-    if (!selectedMessage) return;
-
+  // ✅ Function to delete a ticket
+  const deleteTicket = async (id) => {
     try {
-      const response = await fetch("/api/update-status", {
-        method: "PUT",
+      const response = await fetch("/api/delete-ticket", {
+        method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: selectedMessage.id,
-          status: newStatus,
-        }),
+        body: JSON.stringify({ id }),
       });
 
       const result = await response.json();
       if (result.success) {
-        setMessages(messages.map((msg) =>
-          msg.id === selectedMessage.id ? { ...msg, status: newStatus } : msg
-        ));
-        setSelectedMessage({ ...selectedMessage, status: newStatus });
+        setMessages(messages.filter((msg) => msg.id !== id)); // Remove from UI
       } else {
-        console.error("❌ Failed to update status:", result.error);
+        console.error("❌ Failed to delete ticket:", result.error);
       }
     } catch (error) {
-      console.error("❌ Error updating status:", error);
+      console.error("❌ Error deleting ticket:", error);
     }
   };
 
@@ -94,45 +79,6 @@ export default function InboxPage() {
     return <span className={`px-2 py-1 text-white text-xs font-bold rounded ${color}`}>{status.toUpperCase()}</span>;
   };
 
-  // ✅ Handle sending reply
-  const handleSendReply = async () => {
-    if (!replyText.trim()) return;
-
-    const newReply = {
-      sender: "Support Team",
-      message: replyText,
-      timestamp: new Date().toISOString(),
-    };
-
-    const updatedConversation = [...selectedMessage.conversation, newReply];
-
-    try {
-      const response = await fetch("/api/update-ticket", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: selectedMessage.id,
-          conversation: updatedConversation,
-        }),
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        setMessages(messages.map((msg) =>
-          msg.id === selectedMessage.id ? { ...msg, conversation: updatedConversation } : msg
-        ));
-        setSelectedMessage({ ...selectedMessage, conversation: updatedConversation });
-      } else {
-        console.error("❌ Failed to update ticket:", result.error);
-      }
-    } catch (error) {
-      console.error("❌ Error updating ticket:", error);
-    }
-
-    setIsReplying(false);
-    setReplyText("");
-  };
-
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Inbox</h1>
@@ -144,9 +90,8 @@ export default function InboxPage() {
           <div
             key={message.id}
             className="flex items-center justify-between p-3 rounded cursor-pointer bg-white hover:bg-gray-100"
-            onClick={() => openTicket(message)}
           >
-            <div className="flex-grow">
+            <div className="flex-grow" onClick={() => openTicket(message)}>
               <div className="flex justify-between">
                 <span className="font-semibold text-black">{message.from_email || "Unknown Sender"}</span>
                 <span className="text-sm text-gray-500">
@@ -155,7 +100,13 @@ export default function InboxPage() {
               </div>
               <div className="text-sm text-gray-600 truncate">{message.subject}</div>
             </div>
-            <div className="ml-4">{getStatusTag(message.status)}</div>
+            <div className="ml-4 flex items-center space-x-3">
+              {getStatusTag(message.status)}
+              {/* ✅ Delete Button */}
+              <Button variant="ghost" onClick={() => deleteTicket(message.id)}>
+                <Trash2 className="h-5 w-5 text-red-500" />
+              </Button>
+            </div>
           </div>
         ))}
       </div>
@@ -170,20 +121,6 @@ export default function InboxPage() {
             <div className="mb-4">
               <p><strong>From:</strong> {selectedMessage.from_email || "Unknown Sender"}</p>
               <p><strong>Date:</strong> {selectedMessage.created_at ? format(new Date(selectedMessage.created_at), "MMM d, yyyy h:mm a") : "Unknown Time"}</p>
-            </div>
-
-            {/* ✅ Ticket Status Dropdown */}
-            <div className="mb-4">
-              <p><strong>Status:</strong></p>
-              <select
-                value={selectedMessage.status}
-                onChange={(e) => handleStatusChange(e.target.value)}
-                className="border p-2 rounded w-full"
-              >
-                <option value="open">🟢 OPEN</option>
-                <option value="attending">🟡 ATTENDING</option>
-                <option value="closed">🔴 CLOSED</option>
-              </select>
             </div>
 
             {/* ✅ Conversation History */}
@@ -203,7 +140,7 @@ export default function InboxPage() {
             <div className="mt-6">
               <Textarea placeholder="Type your reply here..." value={replyText} onChange={(e) => setReplyText(e.target.value)} rows={4} />
               <div className="flex justify-end space-x-2 mt-2">
-                <Button onClick={handleSendReply}><Send className="mr-2 h-4 w-4" /> Send Reply</Button>
+                <Button><Send className="mr-2 h-4 w-4" /> Send Reply</Button>
               </div>
             </div>
           </div>
