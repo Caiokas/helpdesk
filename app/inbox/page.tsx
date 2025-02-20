@@ -1,39 +1,61 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { format } from "date-fns"
 import { Mail, Star, Send, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 
-// Generate 30 mock messages
-const generateMockMessages = () => {
-  const messages = []
-  for (let i = 1; i <= 30; i++) {
-    messages.push({
-      id: i,
-      from: `User${i}@example.com`,
-      subject: `Subject ${i}`,
-      message: `This is the content of message ${i}. It's a sample message for testing pagination and conversation history.`,
-      timestamp: new Date(2023, 4, i).toISOString(),
-      status: i % 3 === 0 ? "unread" : "read",
-      isStarred: i % 5 === 0,
-      conversation: [],
-    })
+const fetchTicketsFromAPI = async (setMessages) => {
+  try {
+    const response = await fetch("/api/create-ticket");
+
+    // ✅ Ensure response is JSON
+    const contentType = response.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      throw new Error("❌ Invalid response format: Expected JSON but got something else");
+    }
+
+    const data = await response.json();
+
+    if (data.success && Array.isArray(data.tickets)) {
+      setMessages((prevMessages) => {
+        // ✅ Ensure new tickets are added without duplicates
+        const newTickets = data.tickets.filter(
+          (ticket) => !prevMessages.some((msg) => msg.id === ticket.id)
+        );
+        return [...newTickets, ...prevMessages];
+      });
+    } else {
+      console.warn("❌ API returned no tickets");
+    }
+  } catch (error) {
+    console.error("❌ Failed to fetch tickets:", error);
   }
-  return messages
 }
 
-const mockMessages = generateMockMessages()
 
 export default function InboxPage() {
-  const [messages, setMessages] = useState(mockMessages)
+  const [messages, setMessages] = useState([])
   const [selectedMessage, setSelectedMessage] = useState(null)
   const [isReplying, setIsReplying] = useState(false)
   const [replyText, setReplyText] = useState("")
   const [currentPage, setCurrentPage] = useState(1)
   const messagesPerPage = 20
+
+  // ✅ Fetch new tickets from API every 5 seconds
+  useEffect(() => {
+    fetchTicketsFromAPI(setMessages)
+    const interval = setInterval(() => fetchTicketsFromAPI(setMessages), 5000)
+
+    return () => clearInterval(interval) // Cleanup on component unmount
+  }, [])
+
+  const openTicket = (message) => {
+    setSelectedMessage(message)
+    markAsRead(message.id)
+  }
 
   const toggleStarred = (id) => {
     setMessages(messages.map((msg) => (msg.id === id ? { ...msg, isStarred: !msg.isStarred } : msg)))
@@ -58,8 +80,8 @@ export default function InboxPage() {
 
     setMessages(
       messages.map((msg) =>
-        msg.id === selectedMessage.id ? { ...msg, conversation: [...msg.conversation, newReply] } : msg,
-      ),
+        msg.id === selectedMessage.id ? { ...msg, conversation: [...msg.conversation, newReply] } : msg
+      )
     )
 
     setSelectedMessage({
@@ -74,7 +96,6 @@ export default function InboxPage() {
   const indexOfLastMessage = currentPage * messagesPerPage
   const indexOfFirstMessage = indexOfLastMessage - messagesPerPage
   const currentMessages = messages.slice(indexOfFirstMessage, indexOfLastMessage)
-
   const totalPages = Math.ceil(messages.length / messagesPerPage)
 
   return (
@@ -90,10 +111,7 @@ export default function InboxPage() {
             className={`flex items-center p-3 rounded cursor-pointer ${
               message.status === "unread" ? "bg-blue-50" : "bg-white"
             } hover:bg-gray-100`}
-            onClick={() => {
-              setSelectedMessage(message)
-              markAsRead(message.id)
-            }}
+            onClick={() => openTicket(message)} // ✅ Open ticket when clicked
           >
             <Button
               variant="ghost"
@@ -132,6 +150,8 @@ export default function InboxPage() {
           Next <ChevronRight className="h-4 w-4 ml-2" />
         </Button>
       </div>
+
+      {/* ✅ Ticket Reply Section */}
       {selectedMessage && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -149,12 +169,8 @@ export default function InboxPage() {
               </Button>
             </div>
             <div className="mb-4">
-              <p>
-                <strong>From:</strong> {selectedMessage.from}
-              </p>
-              <p>
-                <strong>Date:</strong> {format(new Date(selectedMessage.timestamp), "MMM d, yyyy h:mm a")}
-              </p>
+              <p><strong>From:</strong> {selectedMessage.from}</p>
+              <p><strong>Date:</strong> {format(new Date(selectedMessage.timestamp), "MMM d, yyyy h:mm a")}</p>
             </div>
             <div className="border-t pt-4">
               <p>{selectedMessage.message}</p>
@@ -164,9 +180,7 @@ export default function InboxPage() {
                 <h4 className="font-bold mb-2">Conversation History:</h4>
                 {selectedMessage.conversation.map((reply, index) => (
                   <div key={index} className="mb-2">
-                    <p>
-                      <strong>{reply.from}:</strong> {reply.message}
-                    </p>
+                    <p><strong>{reply.from}:</strong> {reply.message}</p>
                     <p className="text-sm text-gray-500">{format(new Date(reply.timestamp), "MMM d, yyyy h:mm a")}</p>
                   </div>
                 ))}
@@ -174,24 +188,15 @@ export default function InboxPage() {
             )}
             <div className="mt-6">
               {!isReplying ? (
-                <Button className="mr-2" onClick={handleReply}>
+                <Button className="mr-2" onClick={() => setIsReplying(true)}>
                   <Mail className="mr-2 h-4 w-4" /> Reply
                 </Button>
               ) : (
                 <div className="space-y-4">
-                  <Textarea
-                    placeholder="Type your reply here..."
-                    value={replyText}
-                    onChange={(e) => setReplyText(e.target.value)}
-                    rows={4}
-                  />
+                  <Textarea placeholder="Type your reply here..." value={replyText} onChange={(e) => setReplyText(e.target.value)} rows={4} />
                   <div className="flex justify-end space-x-2">
-                    <Button variant="outline" onClick={() => setIsReplying(false)}>
-                      Cancel
-                    </Button>
-                    <Button onClick={handleSendReply}>
-                      <Send className="mr-2 h-4 w-4" /> Send Reply
-                    </Button>
+                    <Button variant="outline" onClick={() => setIsReplying(false)}>Cancel</Button>
+                    <Button onClick={handleSendReply}><Send className="mr-2 h-4 w-4" /> Send Reply</Button>
                   </div>
                 </div>
               )}
@@ -202,4 +207,3 @@ export default function InboxPage() {
     </div>
   )
 }
-
