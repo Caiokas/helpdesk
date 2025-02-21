@@ -146,6 +146,7 @@ export default function InboxPage() {
 
   const getStatusTag = (status) => {
     let color = "bg-gray-400"
+    console.log("test")
     if (status === "open") color = "bg-green-500"
     if (status === "attending") color = "bg-yellow-500"
     if (status === "closed") color = "bg-red-500"
@@ -303,6 +304,7 @@ export default function InboxPage() {
                   <Send className="mr-2 h-4 w-4" /> Send Reply
                 </Button>
               </div>
+
             </div>
           </div>
         </div>
