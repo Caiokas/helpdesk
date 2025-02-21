@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { Trash2, Mail, Star, Send, ChevronLeft, ChevronRight } from "lucide-react";
+import { Trash2, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-// ✅ Function to fetch tickets from Supabase API
+// ✅ Fetch Tickets from Supabase API
 const fetchTicketsFromAPI = async (setMessages) => {
   try {
     const response = await fetch("/api/create-ticket");
@@ -37,8 +37,8 @@ export default function InboxPage() {
   const [messages, setMessages] = useState([]);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [replyText, setReplyText] = useState("");
+  const [status, setStatus] = useState("");
 
-  // ✅ Fetch tickets from API when page loads
   useEffect(() => {
     fetchTicketsFromAPI(setMessages);
     const interval = setInterval(() => fetchTicketsFromAPI(setMessages), 5000);
@@ -47,9 +47,16 @@ export default function InboxPage() {
 
   const openTicket = (message) => {
     setSelectedMessage(message);
+    setStatus(message.status);
   };
 
-  // ✅ Function to delete a ticket
+  const closeTicket = (e) => {
+    if (e.target.id === "ticketModal") {
+      setSelectedMessage(null);
+    }
+  };
+
+  // ✅ FIXED DELETE FUNCTION
   const deleteTicket = async (id) => {
     try {
       const response = await fetch("/api/delete-ticket", {
@@ -60,7 +67,10 @@ export default function InboxPage() {
 
       const result = await response.json();
       if (result.success) {
-        setMessages(messages.filter((msg) => msg.id !== id)); // Remove from UI
+        setMessages(messages.filter((msg) => msg.id !== id));
+        if (selectedMessage?.id === id) {
+          setSelectedMessage(null);
+        }
       } else {
         console.error("❌ Failed to delete ticket:", result.error);
       }
@@ -69,9 +79,80 @@ export default function InboxPage() {
     }
   };
 
-  // ✅ Function to render the status tag with color
+  // ✅ FIXED STATUS UPDATE (KEEPS CHAT HISTORY)
+  const updateTicketStatus = async (id, newStatus) => {
+    if (!id || !selectedMessage?.conversation) {
+      console.error("❌ Missing ticket ID or conversation data.");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/update-ticket", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id,
+          status: newStatus,
+          conversation: selectedMessage.conversation, // ✅ KEEP CHAT HISTORY!
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setMessages(messages.map((msg) =>
+          msg.id === id ? { ...msg, status: newStatus } : msg
+        ));
+        setSelectedMessage({ ...selectedMessage, status: newStatus });
+        setStatus(newStatus);
+      } else {
+        console.error("❌ Failed to update ticket status:", result.error);
+      }
+    } catch (error) {
+      console.error("❌ Error updating ticket status:", error);
+    }
+  };
+
+  // ✅ FIXED REPLY FUNCTION (KEEPS STATUS + HISTORY)
+  const handleSendReply = async () => {
+    if (!replyText.trim()) return;
+
+    const newReply = {
+      sender: "Support Team",
+      message: replyText,
+      timestamp: new Date().toISOString(),
+    };
+
+    const updatedConversation = [...(selectedMessage.conversation || []), newReply];
+
+    try {
+      const response = await fetch("/api/update-ticket", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: selectedMessage.id,
+          conversation: updatedConversation,
+          status: selectedMessage.status, // ✅ KEEP STATUS
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setMessages(messages.map((msg) =>
+          msg.id === selectedMessage.id ? { ...msg, conversation: updatedConversation } : msg
+        ));
+        setSelectedMessage({ ...selectedMessage, conversation: updatedConversation });
+      } else {
+        console.error("❌ Failed to update ticket:", result.error);
+      }
+    } catch (error) {
+      console.error("❌ Error updating ticket:", error);
+    }
+
+    setReplyText("");
+  };
+
   const getStatusTag = (status) => {
-    let color = "bg-gray-400"; // Default color
+    let color = "bg-gray-400";
     if (status === "open") color = "bg-green-500";
     if (status === "attending") color = "bg-yellow-500";
     if (status === "closed") color = "bg-red-500";
@@ -82,9 +163,6 @@ export default function InboxPage() {
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Inbox</h1>
-      <div className="mb-4">
-        <Input type="text" placeholder="Search messages..." className="w-full" />
-      </div>
       <div className="space-y-2 mb-4">
         {messages.map((message) => (
           <div
@@ -102,7 +180,6 @@ export default function InboxPage() {
             </div>
             <div className="ml-4 flex items-center space-x-3">
               {getStatusTag(message.status)}
-              {/* ✅ Delete Button */}
               <Button variant="ghost" onClick={() => deleteTicket(message.id)}>
                 <Trash2 className="h-5 w-5 text-red-500" />
               </Button>
@@ -112,37 +189,33 @@ export default function InboxPage() {
       </div>
 
       {selectedMessage && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+        <div id="ticketModal" className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" onClick={closeTicket}>
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold">{selectedMessage.subject}</h3>
-              <Button variant="ghost" onClick={() => setSelectedMessage(null)}>Close</Button>
+              <Button variant="ghost" onClick={() => setSelectedMessage(null)}>
+                <X className="h-6 w-6 text-gray-600" />
+              </Button>
             </div>
             <div className="mb-4">
-              <p><strong>From:</strong> {selectedMessage.from_email || "Unknown Sender"}</p>
-              <p><strong>Date:</strong> {selectedMessage.created_at ? format(new Date(selectedMessage.created_at), "MMM d, yyyy h:mm a") : "Unknown Time"}</p>
+              <label className="block font-bold mb-1">Status:</label>
+              <select
+                value={status}
+                onChange={(e) => updateTicketStatus(selectedMessage.id, e.target.value)}
+                className="w-full p-2 border rounded-md"
+              >
+                <option value="open">🟢 Open</option>
+                <option value="attending">🟡 Attending</option>
+                <option value="closed">🔴 Closed</option>
+              </select>
             </div>
-
-            {/* ✅ Conversation History */}
-            {selectedMessage.conversation.length > 0 && (
-              <div className="mt-4 border-t pt-4">
-                <h4 className="font-bold mb-2">Conversation History:</h4>
-                {selectedMessage.conversation.map((reply, index) => (
-                  <div key={index} className="mb-2">
-                    <p><strong>{reply.sender}:</strong> {reply.message}</p>
-                    <p className="text-sm text-gray-500">{reply.timestamp ? format(new Date(reply.timestamp), "MMM d, yyyy h:mm a") : "Unknown Time"}</p>
-                  </div>
-                ))}
+            {selectedMessage.conversation?.length > 0 && selectedMessage.conversation.map((reply, index) => (
+              <div key={index}>
+                <p><strong>{reply.sender}:</strong> {reply.message}</p>
               </div>
-            )}
-
-            {/* ✅ Reply Field */}
-            <div className="mt-6">
-              <Textarea placeholder="Type your reply here..." value={replyText} onChange={(e) => setReplyText(e.target.value)} rows={4} />
-              <div className="flex justify-end space-x-2 mt-2">
-                <Button><Send className="mr-2 h-4 w-4" /> Send Reply</Button>
-              </div>
-            </div>
+            ))}
+            <Textarea placeholder="Type your reply here..." value={replyText} onChange={(e) => setReplyText(e.target.value)} rows={4} />
+            <Button onClick={handleSendReply}><Send className="mr-2 h-4 w-4" /> Send Reply</Button>
           </div>
         </div>
       )}
