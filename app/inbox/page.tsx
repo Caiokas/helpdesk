@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { Trash2, Send, X } from "lucide-react";
+import { Trash2, Mail, Star, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -56,33 +56,9 @@ export default function InboxPage() {
     }
   };
 
-  // ✅ FIXED DELETE FUNCTION
-  const deleteTicket = async (id) => {
-    try {
-      const response = await fetch("/api/delete-ticket", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        setMessages(messages.filter((msg) => msg.id !== id));
-        if (selectedMessage?.id === id) {
-          setSelectedMessage(null);
-        }
-      } else {
-        console.error("❌ Failed to delete ticket:", result.error);
-      }
-    } catch (error) {
-      console.error("❌ Error deleting ticket:", error);
-    }
-  };
-
-  // ✅ FIXED STATUS UPDATE (KEEPS CHAT HISTORY)
   const updateTicketStatus = async (id, newStatus) => {
-    if (!id || !selectedMessage?.conversation) {
-      console.error("❌ Missing ticket ID or conversation data.");
+    if (!id) {
+      console.error("❌ Missing ticket ID.");
       return;
     }
 
@@ -90,11 +66,7 @@ export default function InboxPage() {
       const response = await fetch("/api/update-ticket", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id,
-          status: newStatus,
-          conversation: selectedMessage.conversation, // ✅ KEEP CHAT HISTORY!
-        }),
+        body: JSON.stringify({ id, status: newStatus }),
       });
 
       const result = await response.json();
@@ -112,7 +84,6 @@ export default function InboxPage() {
     }
   };
 
-  // ✅ FIXED REPLY FUNCTION (KEEPS STATUS + HISTORY)
   const handleSendReply = async () => {
     if (!replyText.trim()) return;
 
@@ -131,7 +102,6 @@ export default function InboxPage() {
         body: JSON.stringify({
           id: selectedMessage.id,
           conversation: updatedConversation,
-          status: selectedMessage.status, // ✅ KEEP STATUS
         }),
       });
 
@@ -151,6 +121,26 @@ export default function InboxPage() {
     setReplyText("");
   };
 
+  const deleteTicket = async (id) => {
+    try {
+      const response = await fetch("/api/delete-ticket", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setMessages(messages.filter((msg) => msg.id !== id));
+        setSelectedMessage(null);
+      } else {
+        console.error("❌ Failed to delete ticket:", result.error);
+      }
+    } catch (error) {
+      console.error("❌ Error deleting ticket:", error);
+    }
+  };
+
   const getStatusTag = (status) => {
     let color = "bg-gray-400";
     if (status === "open") color = "bg-green-500";
@@ -161,8 +151,11 @@ export default function InboxPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-5xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Inbox</h1>
+      <div className="mb-4">
+        <Input type="text" placeholder="Search messages..." className="w-full" />
+      </div>
       <div className="space-y-2 mb-4">
         {messages.map((message) => (
           <div
@@ -190,13 +183,18 @@ export default function InboxPage() {
 
       {selectedMessage && (
         <div id="ticketModal" className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" onClick={closeTicket}>
-          <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-bold">{selectedMessage.subject}</h3>
               <Button variant="ghost" onClick={() => setSelectedMessage(null)}>
                 <X className="h-6 w-6 text-gray-600" />
               </Button>
             </div>
+            <div className="mb-4">
+              <p><strong>From:</strong> {selectedMessage.from_email || "Unknown Sender"}</p>
+              <p><strong>Date:</strong> {selectedMessage.created_at ? format(new Date(selectedMessage.created_at), "MMM d, yyyy h:mm a") : "Unknown Time"}</p>
+            </div>
+
             <div className="mb-4">
               <label className="block font-bold mb-1">Status:</label>
               <select
@@ -209,13 +207,25 @@ export default function InboxPage() {
                 <option value="closed">🔴 Closed</option>
               </select>
             </div>
-            {selectedMessage.conversation?.length > 0 && selectedMessage.conversation.map((reply, index) => (
-              <div key={index}>
-                <p><strong>{reply.sender}:</strong> {reply.message}</p>
+
+            {/* ✅ Conversation History */}
+            {selectedMessage.conversation?.length > 0 && (
+              <div className="mt-4 border-t pt-4">
+                <h4 className="font-bold mb-2">Conversation History:</h4>
+                {selectedMessage.conversation.map((reply, index) => (
+                  <div key={index} className="mb-2">
+                    <p><strong>{reply.sender}:</strong> {reply.message}</p>
+                    <p className="text-sm text-gray-500">{reply.timestamp ? format(new Date(reply.timestamp), "MMM d, yyyy h:mm a") : "Unknown Time"}</p>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
+
+            {/* ✅ Chatbox & Reply Button */}
             <Textarea placeholder="Type your reply here..." value={replyText} onChange={(e) => setReplyText(e.target.value)} rows={4} />
-            <Button onClick={handleSendReply}><Send className="mr-2 h-4 w-4" /> Send Reply</Button>
+            <div className="flex justify-end space-x-2 mt-2">
+              <Button onClick={handleSendReply}><Send className="mr-2 h-4 w-4" /> Send Reply</Button>
+            </div>
           </div>
         </div>
       )}
